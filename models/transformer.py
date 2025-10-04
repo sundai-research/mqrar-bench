@@ -48,8 +48,7 @@ class TransformerAttention(nn.Module):
         # RoPE
         self.rotary = RotaryEmbedding(
             dim=self.head_dim,
-            base=rope_theta,
-            max_position_embeddings=max_position_embeddings
+            base=rope_theta
         )
 
     def forward(
@@ -72,9 +71,7 @@ class TransformerAttention(nn.Module):
         v = self.v_proj(x).view(batch_size, seq_len, self.num_kv_heads, self.head_dim)
 
         # Apply RoPE
-        cos, sin = self.rotary(v, seq_len=seq_len)
-        q = self.rotary.apply_rotary_pos_emb(q, cos, sin)
-        k = self.rotary.apply_rotary_pos_emb(k, cos, sin)
+        q, k = self.rotary(q, k)
 
         # Grouped-query attention (expand k, v if needed)
         if self.num_kv_groups > 1:
