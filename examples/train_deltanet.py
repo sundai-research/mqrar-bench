@@ -39,8 +39,9 @@ def train_epoch(model, dataloader, optimizer, device, grad_clip=1.0):
         input_ids = batch['input_ids'].to(device)
         labels = batch['labels'].to(device)
 
-        # Forward pass
-        logits, loss = model(input_ids, labels)
+        # Forward pass with autocast for bfloat16
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+            logits, loss = model(input_ids, labels)
 
         # Backward pass
         optimizer.zero_grad()
@@ -85,7 +86,7 @@ def main():
         num_heads=args.num_heads,
         intermediate_size=args.intermediate_size,
         mode='chunk',  # Use chunk mode for training
-    ).to(args.device)
+    ).to(args.device).to(torch.bfloat16)
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
 

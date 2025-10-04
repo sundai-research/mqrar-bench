@@ -96,16 +96,35 @@ class DeltaNetAttention(nn.Module):
 
         # Beta (forgetting factor)
         if self.use_beta:
-            beta = self.b_proj(x).view(batch_size, seq_len, self.num_heads, 1)
+            beta = self.b_proj(x).view(batch_size, seq_len, self.num_heads)
             beta = torch.sigmoid(beta)
+            # Reshape to (batch_size, num_heads, seq_len) as expected by FLA
+            beta = beta.transpose(1, 2)
         else:
             beta = None
 
+        # Ensure all tensors have the same dtype
+        target_dtype = q.dtype
+        k = k.to(target_dtype)
+        v = v.to(target_dtype)
+        if beta is not None:
+            beta = beta.to(target_dtype)
+
         # Apply DeltaNet kernel
         if self.mode == 'chunk':
-            o = chunk_delta_rule(q, k, v, beta)
+            result = chunk_delta_rule(q, k, v, beta)
+            # Handle tuple return (o, final_state)
+            if isinstance(result, tuple):
+                o, _ = result
+            else:
+                o = result
         elif self.mode == 'fused_recurrent':
-            o = fused_recurrent_delta_rule(q, k, v, beta)
+            result = fused_recurrent_delta_rule(q, k, v, beta)
+            # Handle tuple return (o, final_state)
+            if isinstance(result, tuple):
+                o, _ = result
+            else:
+                o = result
         else:
             raise ValueError(f"Unsupported mode: {self.mode}")
 

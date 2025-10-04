@@ -14,7 +14,7 @@ from models import PaTHTransformer
 
 class DummyDataset(Dataset):
     """Dummy dataset for demonstration"""
-    def __init__(self, vocab_size=32000, seq_len=512, num_samples=1000):
+    def __init__(self, vocab_size=32000, seq_len=256, num_samples=1000):
         self.vocab_size = vocab_size
         self.seq_len = seq_len
         self.num_samples = num_samples
@@ -69,7 +69,7 @@ def main():
     parser.add_argument('--num_kv_heads', type=int, default=None, help='For GQA')
     parser.add_argument('--use_forget_gate', action='store_true', help='Use forget gates')
     parser.add_argument('--seq_len', type=int, default=512)
-    parser.add_argument('--batch_size', type=int, default=8)
+    parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--lr', type=float, default=3e-4)
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
