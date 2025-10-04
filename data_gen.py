@@ -306,7 +306,8 @@ for batch_inputs, batch_labels in train_dl:
 torch.save(data, SAVE_PATH)
 print(f"Dataset saved to {SAVE_PATH}")
 
-# load the dataset from the file
+# HOW TO: load the dataset from the file
+"""
 data = torch.load(SAVE_PATH, weights_only=False)
 print(f"Dataset loaded from {SAVE_PATH}")
 
@@ -319,4 +320,4 @@ for batch_inputs, batch_labels in train_dl:
     print(f"  Input: {batch_inputs[0]}")
     print(f"  Label: {batch_labels[0]}")
     break
-
+"""
