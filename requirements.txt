@@ -1,0 +1,14 @@
+torch>=2.5.0
+triton>=3.0.0
+einops>=0.8.0
+tqdm>=4.66.0
+
+# Install FLA for the kernels and modules
+# Option 1: From PyPI (stable)
+flash-linear-attention>=0.3.0
+
+# Option 2: From source (latest, uncomment below)
+# git+https://github.com/fla-org/flash-linear-attention
+
+# Optional: Flash Attention 2 for Transformer (better performance)
+# flash-attn>=2.5.0
