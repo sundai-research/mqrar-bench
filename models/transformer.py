@@ -29,6 +29,7 @@ class TransformerAttention(nn.Module):
         max_position_embeddings: int = 2048,
         rope_theta: float = 10000.0,
         layer_idx: int = 0,
+        dropout_value: float = 0.0,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -50,6 +51,9 @@ class TransformerAttention(nn.Module):
             dim=self.head_dim,
             base=rope_theta
         )
+        self.dropout_value = dropout_value if self.training else 0.0
+        self.dropout = nn.Dropout(self.dropout_value)
+    
 
     def forward(
         self,
@@ -99,6 +103,8 @@ class TransformerAttention(nn.Module):
             )
             attn_output = attn_output.transpose(1, 2)
 
+        attn_output = self.dropout(attn_output)
+
         # Reshape and project
         attn_output = attn_output.reshape(batch_size, seq_len, self.hidden_size)
         output = self.o_proj(attn_output)
@@ -118,6 +124,7 @@ class TransformerBlock(nn.Module):
         max_position_embeddings: int = 2048,
         rope_theta: float = 10000.0,
         layer_idx: int = 0,
+        dropout_value: float = 0.0,
     ):
         super().__init__()
 
@@ -130,6 +137,7 @@ class TransformerBlock(nn.Module):
             max_position_embeddings=max_position_embeddings,
             rope_theta=rope_theta,
             layer_idx=layer_idx,
+            dropout_value=dropout_value,
         )
 
         # MLP
@@ -186,6 +194,7 @@ class Transformer(nn.Module):
         max_position_embeddings: int = 2048,
         rope_theta: float = 10000.0,
         pad_token_id: int = 0,
+        dropout_value: float = 0.0,
     ):
         super().__init__()
 
@@ -212,6 +221,7 @@ class Transformer(nn.Module):
                 max_position_embeddings=max_position_embeddings,
                 rope_theta=rope_theta,
                 layer_idx=i,
+                dropout_value=dropout_value,
             )
             for i in range(num_layers)
         ])
@@ -271,7 +281,7 @@ class Transformer(nn.Module):
             loss = torch.nn.functional.cross_entropy(
                 shift_logits.view(-1, self.vocab_size),
                 shift_labels.view(-1),
-                ignore_index=self.pad_token_id
+                ignore_index=-100  # Use -100 to match data labels
             )
 
         return logits, loss

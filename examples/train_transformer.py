@@ -12,32 +12,18 @@ import argparse
 from models import Transformer
 
 
-class DummyDataset(Dataset):
-    """Dummy dataset for demonstration"""
-    def __init__(self, vocab_size=32000, seq_len=512, num_samples=1000):
-        self.vocab_size = vocab_size
-        self.seq_len = seq_len
-        self.num_samples = num_samples
-
-    def __len__(self):
-        return self.num_samples
-
-    def __getitem__(self, idx):
-        # Generate random tokens
-        tokens = torch.randint(0, self.vocab_size, (self.seq_len,))
-        return {'input_ids': tokens, 'labels': tokens}
-
-
 def train_epoch(model, dataloader, optimizer, device, grad_clip=1.0):
     """Train for one epoch"""
     model.train()
     total_loss = 0
     num_batches = 0
+    
 
     pbar = tqdm(dataloader, desc='Training')
     for batch in pbar:
-        input_ids = batch['input_ids'].to(device)
-        labels = batch['labels'].to(device)
+        
+        input_ids = batch[0].to(device)
+        labels = batch[1].to(device)
 
         # Forward pass
         logits, loss = model(input_ids, labels)
@@ -62,15 +48,16 @@ def train_epoch(model, dataloader, optimizer, device, grad_clip=1.0):
 
 def main():
     parser = argparse.ArgumentParser(description='Train Transformer with RoPE')
-    parser.add_argument('--vocab_size', type=int, default=32000)
-    parser.add_argument('--hidden_size', type=int, default=768)
-    parser.add_argument('--num_layers', type=int, default=12)
-    parser.add_argument('--num_heads', type=int, default=12)
+    parser.add_argument('--vocab_size', type=int, default=65)
+    parser.add_argument('--hidden_size', type=int, default=256)
+    parser.add_argument('--num_layers', type=int, default=2)
+    parser.add_argument('--intermediate_size', type=int, default=4*256)
+    parser.add_argument('--num_heads', type=int, default=1)
     parser.add_argument('--num_kv_heads', type=int, default=None, help='For GQA')
-    parser.add_argument('--seq_len', type=int, default=512)
+    parser.add_argument('--seq_len', type=int, default=2048)
     parser.add_argument('--batch_size', type=int, default=8)
-    parser.add_argument('--epochs', type=int, default=10)
-    parser.add_argument('--lr', type=float, default=3e-4)
+    parser.add_argument('--epochs', type=int, default=64)
+    parser.add_argument('--lr', type=float, default=1e-2)
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--compile', action='store_true', help='Use torch.compile')
     args = parser.parse_args()
@@ -83,9 +70,11 @@ def main():
         vocab_size=args.vocab_size,
         hidden_size=args.hidden_size,
         num_layers=args.num_layers,
+        intermediate_size=args.intermediate_size,
         num_heads=args.num_heads,
         num_kv_heads=args.num_kv_heads,
         max_position_embeddings=args.seq_len,
+        dropout_value=0.1,
     ).to(args.device)
 
     # Optional: compile with PyTorch 2.0
@@ -94,18 +83,21 @@ def main():
         model = torch.compile(model)
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
+    from data_gen import SyntheticData
+    from torch.utils.data import TensorDataset
+    data = torch.load('data_baseline.pt', weights_only=False)
 
-    # Create dataset and dataloader
-    dataset = DummyDataset(
-        vocab_size=args.vocab_size,
-        seq_len=args.seq_len,
-        num_samples=1000
-    )
     dataloader = DataLoader(
-        dataset,
+        TensorDataset(data.train_inputs, data.train_labels),
         batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=0
+        num_workers=0,
+        shuffle=False,
+    )
+    test_dl = DataLoader(
+        TensorDataset(data.test_inputs, data.test_labels),
+        batch_size=args.batch_size,
+        num_workers=0,
+        shuffle=False,
     )
 
     # Optimizer (Llama-style)
@@ -113,9 +105,10 @@ def main():
         model.parameters(),
         lr=args.lr,
         betas=(0.9, 0.95),
-        weight_decay=0.1
+        weight_decay=1e-6
     )
 
+    
     # Training loop
     for epoch in range(args.epochs):
         print(f"\nEpoch {epoch + 1}/{args.epochs}")
@@ -136,12 +129,27 @@ def main():
     print("\nTraining completed!")
 
     # Test generation
-    print("\nTesting generation...")
+    print("\nEvaluating...")
     model.eval()
-    prompt = torch.randint(0, args.vocab_size, (1, 10)).to(args.device)
-    generated = model.generate(prompt, max_length=50, temperature=0.8, top_k=40)
-    print(f"Generated tokens: {generated[0].tolist()}")
+    generated_labels = []
+    true_labels = []
+    for batch_inputs, batch_labels in test_dl:
+        input_ids = batch_inputs.to(args.device)
+        labels = batch_labels.to(args.device)
+        logits, loss = model(input_ids, labels)
+        generated_labels.append(logits.argmax(dim=-1))
+        true_labels.append(batch_labels.to('cpu'))
+    generated_labels = torch.cat(generated_labels, dim=0)
+    true_labels = torch.cat(true_labels, dim=0)
 
+    # Only calculate accuracy for non-ignored positions (-100)
+    valid_mask = true_labels != -100
+    import numpy as np
+    np.save('generated_labels.npy', generated_labels.to('cpu').numpy())
+    np.save('true_labels.npy', true_labels.to('cpu').numpy())
+    correct = (generated_labels.to('cpu') == true_labels) & valid_mask
+    accuracy = correct.sum().float() / valid_mask.sum().float()
+    print(f"Accuracy: {accuracy:.4f}")
 
 if __name__ == '__main__':
     main()

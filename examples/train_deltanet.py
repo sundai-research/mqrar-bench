@@ -12,21 +12,6 @@ import argparse
 from models import DeltaNet
 
 
-class DummyDataset(Dataset):
-    """Dummy dataset for demonstration"""
-    def __init__(self, vocab_size=32000, seq_len=512, num_samples=1000):
-        self.vocab_size = vocab_size
-        self.seq_len = seq_len
-        self.num_samples = num_samples
-
-    def __len__(self):
-        return self.num_samples
-
-    def __getitem__(self, idx):
-        # Generate random tokens
-        tokens = torch.randint(0, self.vocab_size, (self.seq_len,))
-        return {'input_ids': tokens, 'labels': tokens}
-
 
 def train_epoch(model, dataloader, optimizer, device, grad_clip=1.0):
     """Train for one epoch"""
@@ -36,8 +21,8 @@ def train_epoch(model, dataloader, optimizer, device, grad_clip=1.0):
 
     pbar = tqdm(dataloader, desc='Training')
     for batch in pbar:
-        input_ids = batch['input_ids'].to(device)
-        labels = batch['labels'].to(device)
+        input_ids = batch[0].to(device)
+        labels = batch[1].to(device)
 
         # Forward pass with autocast for bfloat16
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
@@ -91,16 +76,21 @@ def main():
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
 
     # Create dataset and dataloader
-    dataset = DummyDataset(
-        vocab_size=args.vocab_size,
-        seq_len=args.seq_len,
-        num_samples=1000
-    )
+    from data_gen import SyntheticData
+    from torch.utils.data import TensorDataset
+    data = torch.load('data.pt', weights_only=False)
+
     dataloader = DataLoader(
-        dataset,
+        TensorDataset(data.train_inputs, data.train_labels),
         batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=0
+        num_workers=0,
+        shuffle=False,
+    )
+    test_dl = DataLoader(
+        TensorDataset(data.test_inputs, data.test_labels),
+        batch_size=args.batch_size,
+        num_workers=0,
+        shuffle=False,
     )
 
     # Optimizer

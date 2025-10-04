@@ -302,7 +302,7 @@ class DeltaNet(nn.Module):
             loss = torch.nn.functional.cross_entropy(
                 shift_logits.view(-1, self.vocab_size),
                 shift_labels.view(-1),
-                ignore_index=self.pad_token_id
+                ignore_index=-100
             )
 
         return logits, loss
