@@ -307,9 +307,22 @@ torch.save(data, SAVE_PATH)
 print(f"Dataset saved to {SAVE_PATH}")
 
 # HOW TO: load the dataset from the file
-"""
+# from data_gen import SyntheticData
 data = torch.load(SAVE_PATH, weights_only=False)
 print(f"Dataset loaded from {SAVE_PATH}")
+
+train_dl = DataLoader(
+    TensorDataset(data.train_inputs, data.train_labels),
+    batch_size=BATCH_SIZE,
+    num_workers=0,
+    shuffle=False,
+)
+test_dl = DataLoader(
+    TensorDataset(data.test_inputs, data.test_labels),
+    batch_size=BATCH_SIZE,
+    num_workers=0,
+    shuffle=False,
+)
 
 # Get a sample batch
 for batch_inputs, batch_labels in train_dl:
@@ -320,4 +333,3 @@ for batch_inputs, batch_labels in train_dl:
     print(f"  Input: {batch_inputs[0]}")
     print(f"  Label: {batch_labels[0]}")
     break
-"""
