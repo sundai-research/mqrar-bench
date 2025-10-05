@@ -54,10 +54,10 @@ def main():
     parser.add_argument('--intermediate_size', type=int, default=4*256)
     parser.add_argument('--num_heads', type=int, default=1)
     parser.add_argument('--num_kv_heads', type=int, default=None, help='For GQA')
-    parser.add_argument('--seq_len', type=int, default=2048)
+    parser.add_argument('--seq_len', type=int, default=64)
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--epochs', type=int, default=64)
-    parser.add_argument('--lr', type=float, default=1e-2)
+    parser.add_argument('--lr', type=float, default=3e-4)
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--compile', action='store_true', help='Use torch.compile')
     args = parser.parse_args()
@@ -105,7 +105,7 @@ def main():
         model.parameters(),
         lr=args.lr,
         betas=(0.9, 0.95),
-        weight_decay=1e-6
+        weight_decay=0.1
     )
 
     
@@ -137,16 +137,15 @@ def main():
         input_ids = batch_inputs.to(args.device)
         labels = batch_labels.to(args.device)
         logits, loss = model(input_ids, labels)
+
         generated_labels.append(logits.argmax(dim=-1))
-        true_labels.append(batch_labels.to('cpu'))
+        true_labels.append(labels.to('cpu'))
+
     generated_labels = torch.cat(generated_labels, dim=0)
     true_labels = torch.cat(true_labels, dim=0)
 
     # Only calculate accuracy for non-ignored positions (-100)
     valid_mask = true_labels != -100
-    import numpy as np
-    np.save('generated_labels.npy', generated_labels.to('cpu').numpy())
-    np.save('true_labels.npy', true_labels.to('cpu').numpy())
     correct = (generated_labels.to('cpu') == true_labels) & valid_mask
     accuracy = correct.sum().float() / valid_mask.sum().float()
     print(f"Accuracy: {accuracy:.4f}")

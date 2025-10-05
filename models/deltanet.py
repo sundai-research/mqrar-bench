@@ -295,13 +295,9 @@ class DeltaNet(nn.Module):
         # Compute loss if labels provided
         loss = None
         if labels is not None:
-            # Shift for next-token prediction
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-
             loss = torch.nn.functional.cross_entropy(
-                shift_logits.view(-1, self.vocab_size),
-                shift_labels.view(-1),
+                logits.view(-1, self.vocab_size),
+                labels.view(-1),
                 ignore_index=-100
             )
 

@@ -48,20 +48,20 @@ def train_epoch(model, dataloader, optimizer, device, grad_clip=1.0):
 
 def main():
     parser = argparse.ArgumentParser(description='Train DeltaNet')
-    parser.add_argument('--vocab_size', type=int, default=32000)
-    parser.add_argument('--hidden_size', type=int, default=512)
-    parser.add_argument('--num_layers', type=int, default=6)
-    parser.add_argument('--num_heads', type=int, default=4)
-    parser.add_argument('--intermediate_size', type=int, default=2048)
-    parser.add_argument('--seq_len', type=int, default=512)
+    parser.add_argument('--vocab_size', type=int, default=65)
+    parser.add_argument('--hidden_size', type=int, default=256)
+    parser.add_argument('--num_layers', type=int, default=2)
+    parser.add_argument('--num_heads', type=int, default=1)
+    parser.add_argument('--intermediate_size', type=int, default=4*256)
+    parser.add_argument('--seq_len', type=int, default=64)
     parser.add_argument('--batch_size', type=int, default=8)
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--epochs', type=int, default=64)
     parser.add_argument('--lr', type=float, default=3e-4)
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
     args = parser.parse_args()
 
     print(f"Training DeltaNet on {args.device}")
-    print(f"Model config: {args.hidden_size}d x {args.num_layers}L")
+    print(f"Model config: {args.hidden_size}d x {args.num_layers}L x {args.num_heads}H")
 
     # Create model
     model = DeltaNet(
@@ -78,7 +78,7 @@ def main():
     # Create dataset and dataloader
     from data_gen import SyntheticData
     from torch.utils.data import TensorDataset
-    data = torch.load('data.pt', weights_only=False)
+    data = torch.load('data_baseline.pt', weights_only=False)
 
     dataloader = DataLoader(
         TensorDataset(data.train_inputs, data.train_labels),
@@ -93,8 +93,13 @@ def main():
         shuffle=False,
     )
 
-    # Optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.95))
+    # Optimizer (Llama-style)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=args.lr,
+        betas=(0.9, 0.95),
+        weight_decay=0.1
+    )
 
     # Training loop
     for epoch in range(args.epochs):
@@ -116,11 +121,27 @@ def main():
     print("\nTraining completed!")
 
     # Test generation
-    print("\nTesting generation...")
+    print("\nEvaluating...")
     model.eval()
-    prompt = torch.randint(0, args.vocab_size, (1, 10)).to(args.device)
-    generated = model.generate(prompt, max_length=50, temperature=1.0)
-    print(f"Generated tokens: {generated[0].tolist()}")
+    generated_labels = []
+    true_labels = []
+    for batch_inputs, batch_labels in test_dl:
+        input_ids = batch_inputs.to(args.device)
+        labels = batch_labels.to(args.device)
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+            logits, loss = model(input_ids, labels)
+
+        generated_labels.append(logits.argmax(dim=-1))
+        true_labels.append(labels.to('cpu'))
+
+    generated_labels = torch.cat(generated_labels, dim=0)
+    true_labels = torch.cat(true_labels, dim=0)
+
+    # Only calculate accuracy for non-ignored positions (-100)
+    valid_mask = true_labels != -100
+    correct = (generated_labels.to('cpu') == true_labels) & valid_mask
+    accuracy = correct.sum().float() / valid_mask.sum().float()
+    print(f"Accuracy: {accuracy:.4f}")
 
 
 if __name__ == '__main__':
